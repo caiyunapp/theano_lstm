@@ -53,10 +53,10 @@ samplers = {
     "adverb": Sampler(["rapidly", "calmly", "cooly", "in jest", "fantastically", "angrily", "dazily"])
 }
 
-samplers = Sampler({"剪刀": 0.3, "石头": 0.4, "布": 0.29, "不玩儿了":0.01})
+samplers = Sampler({"剪刀": 0.3, "石头": 0.4, "布": 0.2, "GG":0.1})
 
 def generate_nonsense(word = ""):
-    if word.endswith("不玩儿了"):
+    if word.endswith("GG"):
         return word
     else:
         if len(word) > 0:
@@ -64,7 +64,7 @@ def generate_nonsense(word = ""):
         else:
             word = "开始 "
         if len(word) > 500:
-            word += "不玩儿了"
+            word += "GG"
         else:
             if word.endswith("石头 "):
                 word += "布"
@@ -139,7 +139,7 @@ class Vocab:
             indices = np.zeros(len(line), dtype=np.int32)
         
         for i, word in enumerate(line):
-            indices[i] = self.word2index.get(word, self.unknown)
+            indices[i] = self.word2index.get(word)
             
         return indices
     
@@ -351,8 +351,14 @@ if __name__ == "__main__" :
     def get_handcraft_action(last_action_others_take):
         return "石头"
     
-#    def get_handcraft_action(last_action_others_take):
-#        return get_nn_action(last_action_others_take)
+    def get_handcraft_action(last_action_others_take):
+        return actionReverse(str(vocab(model2.greedy_fun(vocab.word2index[last_action_others_take]))).encode("utf8").split(" ")[1])
+    
+    def get_handcraft_action(last_action_others_take):
+        if last_action_others_take == "布":
+            return "剪刀"
+        else:
+            return samplers() 
     
     def get_nn_action(last_action_others_take):
         return actionReverse(str(vocab(model.greedy_fun(vocab.word2index[last_action_others_take]))).encode("utf8").split(" ")[1])
@@ -364,20 +370,33 @@ if __name__ == "__main__" :
         else : return inputAction
  
     num_of_turns = 5
-    len_of_each_turn = 10
+    len_of_each_turn = 20
 
     # construct model & theano functions:
     model = Model(
-        input_size=5,
+        input_size=4,
         hidden_size=10,
         vocab_size=len(vocab),
         stack_size=1, # make this bigger, but makes compilation slow
         celltype=RNN # use RNN or LSTM
     )
-    model.stop_on(vocab.word2index["不玩儿了"])
+    model.stop_on(vocab.word2index["GG"])
+
+    # construct model & theano functions:
+    model2 = Model(
+        input_size=4,
+        hidden_size=20,
+        vocab_size=len(vocab),
+        stack_size=2, # make this bigger, but makes compilation slow
+        celltype=RNN # use RNN or LSTM
+    )
+    model2.stop_on(vocab.word2index["GG"])
+
 
     #init model
-    error = model.update_fun(numerical_lines, numerical_lengths)    
+    for i in range(100):
+      error = model.update_fun(numerical_lines, numerical_lengths)    
+#      error = model2.update_fun(numerical_lines, numerical_lengths)    
 
     #train:
     for i in range(10000):
@@ -389,11 +408,12 @@ if __name__ == "__main__" :
             history_for_nn_train = "开始"
             history_nn = "开始"
             for j in range(len_of_each_turn) :
+                hand_action_last = hand_action
                 hand_action = get_handcraft_action(nn_action)
-                nn_action = get_nn_action(hand_action)
+                nn_action = get_nn_action(hand_action_last)
                 history_for_nn_train += " " + hand_action
                 history_nn += " " + nn_action
-            history_for_nn_train += " 不玩儿了"
+            history_for_nn_train += " GG"
             print("hand:"+history_for_nn_train.replace(" ","\t"))
             print("  nn:"+history_nn.replace(" ","\t"))
             lines.append(history_for_nn_train)
@@ -408,8 +428,10 @@ if __name__ == "__main__" :
         for i in range(1):
             print("nn is learning ...")
             error = model.update_fun(numerical_lines, numerical_lengths)    
+#            error = model2.update_fun(numerical_lines, numerical_lengths)    
 
         print(vocab(model.greedy_fun(vocab.word2index["开始"])))
+        print(vocab(model2.greedy_fun(vocab.word2index["开始"])))
         print("epoch %(epoch)d, error=%(error).2f" % ({"epoch": i, "error": error}))
 
 

@@ -354,6 +354,8 @@ if __name__ == "__main__" :
     )
     model.stop_on(vocab.word2index["不玩儿了"])
 
+    train_batch_size = 100
+
     # train:
     for i in range(10000):
         error = model.update_fun(numerical_lines, numerical_lengths)    
