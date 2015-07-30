@@ -68,6 +68,7 @@ def generate_nonsense(word = ""):
                 word += "剪刀"
             else:
                 word += samplers()
+#             word += samplers()
         return generate_nonsense(word)
 
 

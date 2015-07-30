@@ -220,6 +220,7 @@ class Model:
         # inputs are matrices of indices,
         # each row is a sentence, each column a timestep
         self._stop_word   = theano.shared(np.int32(999999999), name="stop word")
+        self.new_states   = theano.shared(np.int32(999999999), name="stop word")
         self.for_how_long = T.ivector()
         self.input_mat = T.imatrix()
         self.priming_word = T.iscalar()
@@ -232,6 +233,7 @@ class Model:
         self.create_cost_fun()
         self.create_training_function()
         self.create_predict_function()
+        #self.create_ct_brain()
         
     def stop_on(self, idx):
         self._stop_word.set_value(idx)
@@ -239,7 +241,19 @@ class Model:
     @property
     def params(self):
         return self.model.params
-                                 
+
+    def create_ct_brain(self):
+        self.ct_brain = theano.function(input=[idx], update=[(self.new_states, self.model.forward(idx, prev_hiddens = [None] + self.new_states[1:-1]))])
+
+    def ct_brain_simple(idx):
+        
+        new_states = self.model.forward(idx)
+        new_idxes = new_states[-1]
+        new_idx   = new_idxes.argmax()
+
+        return new_idx.eval({x:idx, prev_hiddens:None})
+
+                          
     def create_prediction(self, greedy=False):
         def step(idx, *states):
             # new hiddens are the states we need to pass to LSTMs
@@ -327,7 +341,8 @@ class Model:
     def __call__(self, x):
         return self.pred_fun(x)
 
-
+result = None;
+result2 = None;
 
 if __name__ == "__main__" :
 
@@ -351,31 +366,32 @@ if __name__ == "__main__" :
     def get_handcraft_action(last_action_others_take):
         return "石头"
     
-    def get_handcraft_action(last_action_others_take):
-        return actionReverse(str(vocab(model2.greedy_fun(vocab.word2index[last_action_others_take]))).encode("utf8").split(" ")[1])
-    
+#    def get_handcraft_action(last_action_others_take):
+#        return actionReverse(str(vocab(model2.greedy_fun(vocab.word2index[last_action_others_take]))).encode("utf8").split(" ")[1])
+#    
     def get_handcraft_action(last_action_others_take):
         if last_action_others_take == "布":
             return "剪刀"
         else:
             return samplers() 
+
+#    def get_handcraft_action(last_action_others_take):
+#        return samplers() 
     
-    def get_nn_action(last_action_others_take):
-        return actionReverse(str(vocab(model.greedy_fun(vocab.word2index[last_action_others_take]))).encode("utf8").split(" ")[1])
-    
+   
     def actionReverse(inputAction):
         if inputAction == "石头" : return "布"
         elif inputAction == "剪刀" : return "石头"
         elif inputAction == "布" : return "剪刀"
         else : return inputAction
  
-    num_of_turns = 5
-    len_of_each_turn = 20
+    num_of_turns = 1
+    len_of_each_turn = 10
 
     # construct model & theano functions:
     model = Model(
         input_size=4,
-        hidden_size=10,
+        hidden_size=1,
         vocab_size=len(vocab),
         stack_size=1, # make this bigger, but makes compilation slow
         celltype=RNN # use RNN or LSTM
@@ -385,21 +401,45 @@ if __name__ == "__main__" :
     # construct model & theano functions:
     model2 = Model(
         input_size=4,
-        hidden_size=20,
+        hidden_size=10,
         vocab_size=len(vocab),
         stack_size=2, # make this bigger, but makes compilation slow
         celltype=RNN # use RNN or LSTM
     )
     model2.stop_on(vocab.word2index["GG"])
 
+    def get_nn_action(last_action_others_take):
+        global result
 
+        if last_action_others_take == "开始":
+
+            result  = model.model.forward(theano.shared(vocab(last_action_others_take)[0]))
+        else :
+            result  = model.model.forward(theano.shared(vocab(last_action_others_take)[0]), result)
+
+
+        return actionReverse(vocab.index2word[result[-1].eval().argmax()])
+
+ 
+    def get_nn_action2(last_action_others_take):
+        global result2
+
+        if last_action_others_take == "开始":
+
+            result2  = model2.model.forward(theano.shared(vocab(last_action_others_take)[0]))
+        else :
+            result2  = model2.model.forward(theano.shared(vocab(last_action_others_take)[0]), result2)
+
+
+        return actionReverse(vocab.index2word[result2[-1].eval().argmax()])
+ 
     #init model
     for i in range(100):
       error = model.update_fun(numerical_lines, numerical_lengths)    
-#      error = model2.update_fun(numerical_lines, numerical_lengths)    
+      error = model2.update_fun(numerical_lines, numerical_lengths)    
 
     #train:
-    for i in range(10000):
+    for i in range(1000):
         #play some turns
         lines =[]
         for k in range(num_of_turns) : 
@@ -409,7 +449,7 @@ if __name__ == "__main__" :
             history_nn = "开始"
             for j in range(len_of_each_turn) :
                 hand_action_last = hand_action
-                hand_action = get_handcraft_action(nn_action)
+                hand_action = get_nn_action2(nn_action)
                 nn_action = get_nn_action(hand_action_last)
                 history_for_nn_train += " " + hand_action
                 history_nn += " " + nn_action
@@ -428,7 +468,7 @@ if __name__ == "__main__" :
         for i in range(1):
             print("nn is learning ...")
             error = model.update_fun(numerical_lines, numerical_lengths)    
-#            error = model2.update_fun(numerical_lines, numerical_lengths)    
+            error = model2.update_fun(numerical_lines, numerical_lengths)    
 
         print(vocab(model.greedy_fun(vocab.word2index["开始"])))
         print(vocab(model2.greedy_fun(vocab.word2index["开始"])))
